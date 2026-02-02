@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:new_sms_app/provider/inbox_provider.dart';
+import 'package:new_sms_app/screens/conversation_screen.dart';
 import 'package:provider/provider.dart';
 import 'dart:io';
 
@@ -118,7 +119,7 @@ class _InboxScreenState extends State<InboxScreen> {
 
     return GestureDetector(
       onTap: () {
-        // Navigator.push(context, MaterialPageRoute(builder: (context) => ConversationScreen(address: sms['address'])));
+        Navigator.push(context, MaterialPageRoute(builder: (context) => ConversationScreen(address: msg['address'])));
       },
       child: ListTile(
         contentPadding: EdgeInsets.only(left: 6, right: 4),

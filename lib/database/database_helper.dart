@@ -38,7 +38,19 @@ class DatabaseHelper {
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
-          await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_sms ON messages(address, date)');
+          await db.execute('''
+            DELETE FROM messages
+            WHERE id NOT IN (
+              SELECT MAX(id)
+              FROM messages
+              GROUP BY address, date
+            )
+          ''');
+
+          await db.execute('''
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_sms
+            ON messages(address, date)
+          ''');
         }
       },
     );
@@ -49,23 +61,21 @@ class DatabaseHelper {
     await db.insert('messages', row, conflictAlgorithm: ConflictAlgorithm.ignore);
   }
 
-  /// INBOX (latest message per sender)
   Future<List<Map<String, dynamic>>> getMessages() async {
     final db = await instance.database;
     return await db.rawQuery('''
-      SELECT m.*
-      FROM messages m
-      INNER JOIN (
-        SELECT address, MAX(date) AS max_date
-        FROM messages
-        GROUP BY address
-      ) grouped
-      ON m.address = grouped.address AND m.date = grouped.max_date
-      ORDER BY m.date DESC
-    ''');
+    SELECT *
+    FROM messages m
+    INNER JOIN (
+      SELECT address, MAX(date) as max_date
+      FROM messages
+      GROUP BY address
+    ) grouped
+    ON m.address = grouped.address AND m.date = grouped.max_date
+    ORDER BY m.date DESC
+  ''');
   }
 
-  /// Conversation messages
   Future<List<Map<String, dynamic>>> getConversation(String address) async {
     final db = await instance.database;
     return await db.query('messages', where: 'address = ?', whereArgs: [address], orderBy: 'date ASC');
