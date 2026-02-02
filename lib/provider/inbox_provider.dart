@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:developer';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:new_sms_app/data/model/sms_message_model.dart';
@@ -11,9 +10,9 @@ class InboxProvider with ChangeNotifier {
   final List<String> categories = ["All", "Personal", "OTP", "Bank", "Offers"];
 
   bool isLoading = true;
-  List<Map<String, dynamic>> _messages = [];
-  List<Map<String, dynamic>> filtered = [];
-  List<Map<String, dynamic>> get messages => _messages;
+  List<SmsMessageModel> _messages = [];
+  List<SmsMessageModel> filtered = [];
+  List<SmsMessageModel> get messages => _messages;
 
   static const MethodChannel platform = MethodChannel('samples.flutter.dev/sms');
   static const EventChannel eventChannel = EventChannel('samples.flutter.dev/smsStream');
@@ -47,9 +46,7 @@ class InboxProvider with ChangeNotifier {
 
   void applyFilter({required String newCategory}) {
     selectedCategory = newCategory;
-    filtered = selectedCategory == "All"
-        ? _messages
-        : _messages.where((m) => m['category'] == selectedCategory).toList();
+    filtered = selectedCategory == "All" ? _messages : _messages.where((m) => m.category == selectedCategory).toList();
     isLoading = false;
     notifyListeners();
   }
@@ -69,10 +66,6 @@ class InboxProvider with ChangeNotifier {
 
     try {
       final List<dynamic> systemSms = await platform.invokeMethod('fetchSystemSms');
-      // if (systemSms.isNotEmpty) {
-      //   print("object route first message from System => ${systemSms.first}");
-      // }
-
       for (var sms in systemSms) {
         await DatabaseHelper.instance.insertMessage({
           'address': sms['address'],
@@ -91,13 +84,12 @@ class InboxProvider with ChangeNotifier {
 
   Future<void> refreshInbox() async {
     List<Map<String, dynamic>> tempMessages = await DatabaseHelper.instance.getMessages();
-
-    _messages = tempMessages;
-    final modelMessages = tempMessages.map((e) => SmsMessageModel.fromSystemMap(Map<String, dynamic>.from(e))).toList();
-    print("object route => $modelMessages");
-    // if (_messages.isNotEmpty) {
-    //   print("object route first message from Database=> ${_messages.first}");
-    // }
+    final modelMessages = tempMessages.map((e) {
+      SmsMessageModel td = SmsMessageModel.fromJson(Map<String, dynamic>.from(e));
+      return td;
+    }).toList();
+    _messages.clear();
+    _messages = modelMessages;
     applyFilter(newCategory: selectedCategory);
   }
 

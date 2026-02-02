@@ -22,13 +22,14 @@ class SmsReceiver : BroadcastReceiver() {
                     "is_mine" to 0,
                     "is_read" to 0
                 )
+                // Log.d("TAG", "Requesting default SMS role $data")
                 smsDataList.add(data)
                 // send to Flutter via EventChannel
                 SmsStreamHandler.eventSink?.success(data)
             }
 
             // show notification only if app in background
-            if (!isAppInForeground(context)) {
+            
                 for (sms in messages) {
                     NotificationUtil.show(
                         context,
@@ -36,7 +37,7 @@ class SmsReceiver : BroadcastReceiver() {
                         sms.messageBody ?: ""
                     )
                 }
-            }
+            
         }
     }
 

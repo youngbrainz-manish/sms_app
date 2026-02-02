@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:new_sms_app/data/model/sms_message_model.dart';
 import 'package:new_sms_app/provider/inbox_provider.dart';
 import 'package:new_sms_app/screens/conversation_screen.dart';
 import 'package:provider/provider.dart';
-import 'dart:io';
 
 class InboxScreen extends StatefulWidget {
   const InboxScreen({super.key});
@@ -66,7 +66,7 @@ class _InboxScreenState extends State<InboxScreen> {
                               itemCount: provider.filtered.length,
                               separatorBuilder: (context, i) => const Divider(indent: 85, height: 1),
                               itemBuilder: (context, index) {
-                                return _buildConversationTile(provider.filtered[index]);
+                                return _buildConversationTile(msg: provider.filtered[index], provider: provider);
                               },
                             ),
                     ),
@@ -113,28 +113,36 @@ class _InboxScreenState extends State<InboxScreen> {
     );
   }
 
-  Widget _buildConversationTile(Map<String, dynamic> msg) {
-    final name = msg['contact_name'] ?? msg['address'];
-    final bool isUnread = msg['is_read'] == 0;
+  Widget _buildConversationTile({required SmsMessageModel msg, required InboxProvider provider}) {
+    final name = msg.name ?? msg.address;
 
     return GestureDetector(
-      onTap: () {
-        Navigator.push(context, MaterialPageRoute(builder: (context) => ConversationScreen(address: msg['address'])));
+      onTap: () async {
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) =>
+                ConversationScreen(address: msg.address ?? '', contactName: name, photoUri: msg.avatar),
+          ),
+        );
+        await provider.refreshInbox();
       },
       child: ListTile(
         contentPadding: EdgeInsets.only(left: 6, right: 4),
         leading: CircleAvatar(
           radius: 28,
           backgroundColor: Colors.grey[200],
-          backgroundImage: msg['photo_uri'] != null ? FileImage(File(msg['photo_uri'])) : null,
-          child: msg['photo_uri'] == null ? Text(name.isNotEmpty ? name[0].toUpperCase() : "NA") : null,
+          backgroundImage: msg.avatar != null ? MemoryImage(msg.avatar!) : null,
+          child: msg.avatar == null
+              ? Text((name ?? '').isNotEmpty ? name!.characters.first[0].toUpperCase() : "NA")
+              : null,
         ),
         title: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Expanded(
               child: Text(
-                name,
+                name ?? '',
                 style: const TextStyle(fontWeight: FontWeight.bold),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -142,22 +150,22 @@ class _InboxScreenState extends State<InboxScreen> {
             ),
           ],
         ),
-        subtitle: Text(msg['body'], maxLines: 1, overflow: TextOverflow.ellipsis),
+        subtitle: Text(msg.body ?? '', maxLines: 1, overflow: TextOverflow.ellipsis),
         trailing: Column(
           children: [
-            isUnread
+            msg.isRead == false
                 ? Container(
                     padding: const EdgeInsets.all(7),
                     decoration: const BoxDecoration(color: Color(0xFF4A3AFF), shape: BoxShape.circle),
-                    child: const Text(
-                      "1",
+                    child: Text(
+                      msg.unreadCount.toString(),
                       style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                   )
                 : SizedBox(),
-            Text(_formatDate(msg['date']), style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+            Text(_formatDate(msg.date ?? 0), style: TextStyle(color: Colors.grey[500], fontSize: 12)),
           ],
         ),
       ),

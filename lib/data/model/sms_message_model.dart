@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'dart:convert';
 
 class SmsMessageModel {
   final int? id;
@@ -6,10 +7,11 @@ class SmsMessageModel {
   final String? name;
   final String? address;
   final String? body;
-  final DateTime? date;
+  final int? date;
   final bool? isMine;
   final bool? isRead;
   final String? category;
+  final int? unreadCount;
 
   SmsMessageModel({
     this.id,
@@ -21,60 +23,65 @@ class SmsMessageModel {
     this.isMine,
     this.isRead,
     this.category,
+    this.unreadCount = 0,
   });
 
-  /// 🔹 FROM SYSTEM SMS (Android)
-  factory SmsMessageModel.fromSystemMap(Map<String, dynamic> map) {
+  // CopyWith method
+  SmsMessageModel copyWith({
+    int? id,
+    Uint8List? avatar,
+    String? name,
+    String? address,
+    String? body,
+    int? date,
+    bool? isMine,
+    bool? isRead,
+    String? category,
+    int? unreadCount,
+  }) {
     return SmsMessageModel(
-      id: map['id'] as int?,
-      address: map['address'] as String?,
-      body: map['body'] as String?,
-      date: map['date'] != null ? DateTime.fromMillisecondsSinceEpoch(map['date']) : null,
-
-      // 🔥 int → bool conversion
-      isMine: map['is_mine'] == 1,
-      isRead: map['is_read'] == 1,
-
-      // Contact info
-      name: map['contact_name'] as String?,
-      category: map['category'] as String?,
-
-      // avatar not available yet
-      avatar: null,
+      id: id ?? this.id,
+      avatar: avatar ?? this.avatar,
+      name: name ?? this.name,
+      address: address ?? this.address,
+      body: body ?? this.body,
+      date: date ?? this.date,
+      isMine: isMine ?? this.isMine,
+      isRead: isRead ?? this.isRead,
+      category: category ?? this.category,
+      unreadCount: unreadCount ?? this.unreadCount,
     );
   }
 
-  /// 🔹 NORMAL JSON (local DB / API)
+  // From JSON
   factory SmsMessageModel.fromJson(Map<String, dynamic> json) {
     return SmsMessageModel(
-      id: json['id'],
-      avatar: json['avatar'],
-      name: json['name'],
-      address: json['address'],
-      body: json['body'],
-      date: json['date'] != null ? DateTime.fromMillisecondsSinceEpoch(json['date']) : null,
-      isMine: json['isMine'],
-      isRead: json['isRead'],
-      category: json['category'],
+      id: json['id'] as int?,
+      avatar: json['avatar'] != null ? base64Decode(json['avatar']) : null,
+      name: json['name'] as String?,
+      address: json['address'] as String?,
+      body: json['body'] as String?,
+      date: json['date'] as int?,
+      isMine: json['is_mine'].toString() == "1",
+      isRead: json['is_read'].toString() == "1",
+      category: json['category'] as String?,
+      unreadCount: (json['unread_count'] ?? 0) as int,
     );
   }
 
+  // To JSON
   Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'avatar': avatar,
+      'avatar': avatar != null ? base64Encode(avatar!) : null,
       'name': name,
       'address': address,
       'body': body,
-      'date': date?.millisecondsSinceEpoch,
+      'date': date,
       'isMine': isMine,
       'isRead': isRead,
       'category': category,
+      'unreadCount': unreadCount,
     };
-  }
-
-  @override
-  String toString() {
-    return 'SmsMessageModel(id: $id, address: $address, body: $body, isMine: $isMine)';
   }
 }

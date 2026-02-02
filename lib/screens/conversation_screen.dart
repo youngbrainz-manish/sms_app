@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:new_sms_app/database/database_helper.dart';
 import 'package:intl/intl.dart';
 import 'package:new_sms_app/services/sms_service.dart';
@@ -8,7 +7,7 @@ import 'package:new_sms_app/services/sms_service.dart';
 class ConversationScreen extends StatefulWidget {
   final String address;
   final String? contactName;
-  final String? photoUri;
+  final Uint8List? photoUri;
 
   const ConversationScreen({super.key, required this.address, this.contactName, this.photoUri});
 
@@ -31,8 +30,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
   Future<void> _loadConversation() async {
     _messages = await DatabaseHelper.instance.getConversation(widget.address);
 
-    // mark messages as read (optional – future use)
-    // await DatabaseHelper.instance.markAsRead(widget.address);
+    await DatabaseHelper.instance.markAsRead(widget.address);
 
     setState(() => _loading = false);
 
@@ -58,7 +56,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
           children: [
             CircleAvatar(
               radius: 18,
-              backgroundImage: widget.photoUri != null ? NetworkImage(widget.photoUri!) : null,
+              backgroundImage: widget.photoUri != null ? MemoryImage(widget.photoUri!) : null,
               child: widget.photoUri == null
                   ? Text((widget.contactName ?? widget.address).characters.first.toUpperCase())
                   : null,
@@ -183,7 +181,6 @@ class _ConversationScreenState extends State<ConversationScreen> {
     if (text.isEmpty) return;
     _controller.clear();
     try {
-      // Optimistic update
       Map<String, dynamic> newMessage = {
         'address': widget.address,
         'body': text,
@@ -193,33 +190,19 @@ class _ConversationScreenState extends State<ConversationScreen> {
         'category': 'Personal',
       };
       await DatabaseHelper.instance.insertMessage(newMessage);
-      print("object route => $newMessage");
       _messages = [newMessage, ..._messages];
       setState(() {});
 
       try {
-        var dat = await SmsService.sendSms(widget.address, text);
-
-        if (kDebugMode) {
-          print("object route => dat => $dat");
-        }
-        // // return true;
-        // _controller.clear();
+        await SmsService.sendSms(widget.address, text);
       } catch (e) {
         if (kDebugMode) print("Error Send Message => $e");
-        // return false;
       }
 
-      // Wait a bit for the message to be written to SMS database
-      // await Future.delayed(const Duration(milliseconds: 1500));
-      // Reload to get the actual message from system
       await _loadConversation();
     } catch (e) {
       debugPrint('❌ Error sending message: $e');
-      // emit(ChatError(e.toString()));
-      // await loadConversation(address, silent: true);
     }
-    // return true;
     _controller.clear();
   }
 }
