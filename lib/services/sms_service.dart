@@ -6,15 +6,16 @@ class SmsService {
 
   static Future<bool?> sendSms(String phone, String message) async {
     try {
-      await platform.invokeMethod('sendSms', {
-        'to': phone, // ✅ MUST MATCH Kotlin
-        'message': message, // ✅ MUST MATCH Kotlin
-        'timestamp': DateTime.now().millisecondsSinceEpoch,
-      });
+      await platform.invokeMethod('sendSms', {'to': phone, 'message': message});
       return true;
     } on PlatformException catch (e) {
-      debugPrint("Failed to send SMS: '${e.message}'.  :: $phone :: $message");
+      debugPrint("Failed to send SMS: ${e.message}");
       return false;
     }
   }
+
+  static const EventChannel _eventChannel = EventChannel('samples.flutter.dev/smsStream');
+
+  static Stream<Map<String, dynamic>> get smsStream =>
+      _eventChannel.receiveBroadcastStream().map((event) => Map<String, dynamic>.from(event));
 }

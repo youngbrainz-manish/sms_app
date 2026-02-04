@@ -31,15 +31,40 @@ class SmsReceiver : BroadcastReceiver() {
             // show notification only if app in background
             
                 for (sms in messages) {
+                    val address = sms.originatingAddress ?: "Unknown"
+                    val body = sms.messageBody ?: ""
+                    val threadId = getThreadId(context, address)
+
                     NotificationUtil.show(
-                        context,
-                        sms.originatingAddress ?: "Unknown",
-                        sms.messageBody ?: ""
+                        context = context,
+                        title = address,
+                        body = body,
+                        address = address,
+                        threadId = threadId
                     )
+
                 }
             
         }
     }
+
+    private fun getThreadId(context: Context, address: String): Long {
+        val cursor = context.contentResolver.query(
+            Telephony.Sms.CONTENT_URI,
+            arrayOf(Telephony.Sms.THREAD_ID),
+            "${Telephony.Sms.ADDRESS}=?",
+            arrayOf(address),
+            "date DESC"
+        )
+
+        cursor?.use {
+            if (it.moveToFirst()) {
+                return it.getLong(0)
+            }
+        }
+        return System.currentTimeMillis()
+    }
+
 
     private fun isAppInForeground(context: Context): Boolean {
         val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager

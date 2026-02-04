@@ -3,6 +3,7 @@ import 'package:new_sms_app/app_constants.dart';
 import 'package:new_sms_app/provider/inbox_provider.dart';
 import 'package:new_sms_app/screens/inbox_screen.dart';
 import 'package:new_sms_app/screens/permission_intro_screen.dart';
+import 'package:new_sms_app/services/sms_navigation_service.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -30,6 +31,7 @@ class _MyAppState extends State<MyApp> {
   }
 
   Future<void> _init() async {
+    SmsNavigationService.init(context);
     final prefs = await SharedPreferences.getInstance();
     accessGranted = prefs.getBool(AppConstants.accessGranted) ?? false;
     isDefaultApp = prefs.getBool(AppConstants.isDefaultApp) ?? false;
@@ -53,6 +55,7 @@ class _MyAppState extends State<MyApp> {
       );
     }
     return MultiProvider(
+      ///TODO call from permission screen -..syncSystemMessages
       providers: [ChangeNotifierProvider(create: (_) => InboxProvider())],
       child: MaterialApp(
         debugShowCheckedModeBanner: false,

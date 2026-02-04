@@ -61,20 +61,6 @@ class DatabaseHelper {
     await db.insert('messages', row, conflictAlgorithm: ConflictAlgorithm.ignore);
   }
 
-  // Future<List<Map<String, dynamic>>> getMessages() async {
-  //   final db = await instance.database;
-  //   return await db.rawQuery('''
-  //   SELECT *
-  //   FROM messages m
-  //   INNER JOIN (
-  //     SELECT address, MAX(date) as max_date
-  //     FROM messages
-  //     GROUP BY address
-  //   ) grouped
-  //   ON m.address = grouped.address AND m.date = grouped.max_date
-  //   ORDER BY m.date DESC
-  // ''');
-  // }
   Future<List<Map<String, dynamic>>> getMessages() async {
     final db = await instance.database;
 
@@ -109,5 +95,13 @@ class DatabaseHelper {
     final db = await instance.database;
 
     await db.update('messages', {'is_read': 1}, where: 'address = ? AND is_read = 0', whereArgs: [address]);
+  }
+
+  Stream<List<Map<String, dynamic>>> conversationStream(String address) async* {
+    while (true) {
+      final data = await getConversation(address);
+      yield data;
+      await Future.delayed(const Duration(milliseconds: 500));
+    }
   }
 }

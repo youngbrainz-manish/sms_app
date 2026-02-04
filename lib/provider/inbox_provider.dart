@@ -1,11 +1,19 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:new_sms_app/app_constants.dart';
 import 'package:new_sms_app/data/model/sms_message_model.dart';
 import 'package:new_sms_app/database/database_helper.dart';
+import 'package:new_sms_app/services/sms_manager.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class InboxProvider with ChangeNotifier {
+  bool isDefaultApp = false;
+  bool accessGranted = false;
+  bool isFirstLoading = false;
+  SharedPreferences? prefs;
+
   String selectedCategory = "All";
   final List<String> categories = ["All", "Personal", "OTP", "Bank", "Offers"];
 
@@ -19,8 +27,45 @@ class InboxProvider with ChangeNotifier {
   StreamSubscription? _smsSubscription;
 
   InboxProvider() {
-    WidgetsBinding.instance.addPostFrameCallback((_) => _init());
-    _listenIncomingSms();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _init1();
+      _init();
+      _listenIncomingSms();
+    });
+  }
+
+  Future<void> _init1() async {
+    await SharedPreferences.getInstance();
+    isLoading = true;
+    notifyListeners();
+    isDefaultApp = await SmsManager().checkIsDefault();
+    accessGranted = prefs?.getBool(AppConstants.accessGranted) ?? false;
+    prefs?.setBool(AppConstants.isDefaultApp, isDefaultApp);
+    isLoading = false;
+    notifyListeners();
+  }
+
+  Future<void> _init() async {
+    isLoading = true;
+    await refreshInbox();
+    notifyListeners();
+    await syncSystemMessages();
+  }
+
+  Future<void> setAsDefaultApp() async {
+    isFirstLoading = true;
+    notifyListeners();
+    isDefaultApp = await SmsManager().requestDefaultSmsApp();
+    prefs?.setBool(AppConstants.isDefaultApp, isDefaultApp);
+    notifyListeners();
+    if (isDefaultApp == true) {
+      isFirstLoading = true;
+      notifyListeners();
+      refreshInbox();
+      await syncSystemMessages();
+      isFirstLoading = false;
+      notifyListeners();
+    }
   }
 
   void _listenIncomingSms() {
@@ -31,17 +76,6 @@ class InboxProvider with ChangeNotifier {
         await refreshInbox();
       }
     });
-  }
-
-  Future<void> _init() async {
-    isLoading = true;
-    await refreshInbox();
-    notifyListeners();
-    if (_messages.isEmpty) {
-      isLoading = true;
-      notifyListeners();
-      await syncSystemMessages();
-    }
   }
 
   void applyFilter({required String newCategory}) {

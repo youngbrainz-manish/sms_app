@@ -1,29 +1,64 @@
 package com.example.new_sms_app
 
-import android.app.PendingIntent
 import android.app.role.RoleManager
 import android.content.ContentValues
 import android.content.Intent
-import android.net.Uri
 import android.os.Build
+import android.os.Bundle
 import android.provider.Telephony
 import android.telephony.SmsManager
+import android.util.Log
 import androidx.annotation.NonNull
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
-import android.util.Log
-
 
 class MainActivity : FlutterActivity() {
 
     private val CHANNEL = "samples.flutter.dev/sms"
     private val EVENT_CHANNEL = "samples.flutter.dev/smsStream"
+    private val NAV_CHANNEL = "sms_navigation"
     private val TAG = "SMS_APP"
-    // Log.d(TAG, "Requesting default SMS role")
+    private var pendingResult: MethodChannel.Result? = null
+    private val REQ_DEFAULT_SMS = 1001
 
+
+
+    // ================= ACTIVITY LIFECYCLE =================
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        handleIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIntent(intent)
+    }
+
+    // ================= NOTIFICATION CLICK HANDLER =================
+
+    private fun handleIntent(intent: Intent?) {
+        intent ?: return
+
+        if (intent.getBooleanExtra("openConversation", false)) {
+
+            val data = mapOf(
+                "address" to intent.getStringExtra("address"),
+                "threadId" to intent.getLongExtra("threadId", -1)
+            )
+
+            flutterEngine?.dartExecutor?.binaryMessenger?.let {
+                MethodChannel(it, NAV_CHANNEL)
+                    .invokeMethod("openConversation", data)
+            }
+        }
+    }
+
+    // ================= FLUTTER ENGINE =================
 
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -40,12 +75,13 @@ class MainActivity : FlutterActivity() {
                 }
             }
 
-        // EVENT CHANNEL (incoming SMS / status updates)
+        // EVENT CHANNEL (incoming SMS)
         EventChannel(flutterEngine.dartExecutor.binaryMessenger, EVENT_CHANNEL)
             .setStreamHandler(SmsStreamHandler(this))
     }
 
     // ================= FETCH SYSTEM SMS =================
+
     private fun getSystemSms(): List<Map<String, Any?>> {
         val smsList = mutableListOf<Map<String, Any?>>()
 
@@ -79,12 +115,12 @@ class MainActivity : FlutterActivity() {
         return smsList
     }
 
-    // ================= DEFAULT SMS APP CHECK =================
+    // ================= DEFAULT SMS APP =================
+
     private fun isDefaultSmsApp(): Boolean {
         return Telephony.Sms.getDefaultSmsPackage(this) == packageName
     }
 
-    // ================= REQUEST DEFAULT SMS ROLE =================
     private fun requestDefaultSmsRole(result: MethodChannel.Result) {
 
         if (isDefaultSmsApp()) {
@@ -92,13 +128,19 @@ class MainActivity : FlutterActivity() {
             return
         }
 
+        pendingResult = result  // ✅ STORE result
+
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 val roleManager = getSystemService(RoleManager::class.java)
-
                 if (roleManager.isRoleAvailable(RoleManager.ROLE_SMS)) {
-                    val intent = roleManager.createRequestRoleIntent(RoleManager.ROLE_SMS)
-                    startActivityForResult(intent, 1001)
+                    startActivityForResult(
+                        roleManager.createRequestRoleIntent(RoleManager.ROLE_SMS),
+                        REQ_DEFAULT_SMS
+                    )
+                } else {
+                    pendingResult?.success(false)
+                    pendingResult = null
                 }
             } else {
                 val intent = Intent(Telephony.Sms.Intents.ACTION_CHANGE_DEFAULT).apply {
@@ -107,49 +149,56 @@ class MainActivity : FlutterActivity() {
                         packageName
                     )
                 }
-                startActivityForResult(intent, 1001)
+                startActivityForResult(intent, REQ_DEFAULT_SMS)
             }
-
-            result.success(true)
-
         } catch (e: Exception) {
             Log.e(TAG, "Default SMS request failed", e)
-            result.success(false)
+            pendingResult?.success(false)
+            pendingResult = null
+        }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+
+        if (requestCode == REQ_DEFAULT_SMS) {
+            val isDefault = isDefaultSmsApp()
+            pendingResult?.success(isDefault)
+            pendingResult = null
         }
     }
 
 
     // ================= SEND SMS =================
+
     private fun sendSms(call: MethodCall, result: MethodChannel.Result) {
-    val to = call.argument<String>("to")
-    val message = call.argument<String>("message")
-    val timestamp = call.argument<Long>("timestamp") ?: System.currentTimeMillis()
 
-    if (to.isNullOrEmpty() || message.isNullOrEmpty()) {
-        result.error("INVALID_ARGS", "Phone number or message missing", null)
-        return
-    }
+        val to = call.argument<String>("to")
+        val message = call.argument<String>("message")
+        val timestamp = call.argument<Long>("timestamp") ?: System.currentTimeMillis()
 
-    try {
-        // SEND SMS (no status receivers)
-        SmsManager.getDefault()
-            .sendTextMessage(to, null, message, null, null)
-
-        // INSERT INTO SYSTEM DB (default SMS app only)
-        val values = ContentValues().apply {
-            put(Telephony.Sms.ADDRESS, to)
-            put(Telephony.Sms.BODY, message)
-            put(Telephony.Sms.DATE, timestamp)
-            put(Telephony.Sms.TYPE, Telephony.Sms.MESSAGE_TYPE_SENT)
-            put(Telephony.Sms.READ, 1)
+        if (to.isNullOrEmpty() || message.isNullOrEmpty()) {
+            result.error("INVALID_ARGS", "Phone number or message missing", null)
+            return
         }
 
-        contentResolver.insert(Telephony.Sms.Sent.CONTENT_URI, values)
+        try {
+            SmsManager.getDefault()
+                .sendTextMessage(to, null, message, null, null)
 
-        result.success(true)
+            val values = ContentValues().apply {
+                put(Telephony.Sms.ADDRESS, to)
+                put(Telephony.Sms.BODY, message)
+                put(Telephony.Sms.DATE, timestamp)
+                put(Telephony.Sms.TYPE, Telephony.Sms.MESSAGE_TYPE_SENT)
+                put(Telephony.Sms.READ, 1)
+            }
 
-    } catch (e: Exception) {
-        result.error("SMS_FAILED", e.localizedMessage, null)
+            contentResolver.insert(Telephony.Sms.Sent.CONTENT_URI, values)
+            result.success(true)
+
+        } catch (e: Exception) {
+            result.error("SMS_FAILED", e.localizedMessage, null)
+        }
     }
-}
 }

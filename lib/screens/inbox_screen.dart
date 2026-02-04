@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:lottie/lottie.dart';
 import 'package:new_sms_app/data/model/sms_message_model.dart';
 import 'package:new_sms_app/provider/inbox_provider.dart';
-import 'package:new_sms_app/screens/conversation_screen.dart';
+import 'package:new_sms_app/screens/conversion/conversation_screen.dart';
 import 'package:provider/provider.dart';
 
 class InboxScreen extends StatefulWidget {
@@ -21,24 +22,90 @@ class _InboxScreenState extends State<InboxScreen> {
           return Scaffold(
             backgroundColor: Colors.white,
             appBar: AppBar(
+              centerTitle: true,
               title: const Text(
                 "Messages",
                 style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
               ),
               backgroundColor: Colors.white,
               elevation: 10,
-              actions: [
-                IconButton(
-                  onPressed: () async {
-                    provider.syncSystemMessages();
-                  },
-                  icon: Icon(Icons.refresh),
-                ),
-              ],
+              actions: (provider.isDefaultApp == true)
+                  ? [
+                      IconButton(
+                        onPressed: () async {
+                          provider.syncSystemMessages();
+                        },
+                        icon: Icon(Icons.refresh),
+                      ),
+                    ]
+                  : [],
             ),
-            body: _buildBody(provider: provider),
+            body: provider.isDefaultApp && provider.isFirstLoading == false
+                ? _buildBody(provider: provider)
+                : getDefaultPermissionWidget(provider: provider),
           );
         },
+      ),
+    );
+  }
+
+  Widget getDefaultPermissionWidget({required InboxProvider provider}) {
+    return Center(
+      child: Column(
+        children: [
+          if (provider.isDefaultApp == false) ...[
+            Image.asset("assets/images/default_icon.png"),
+            Text("data"),
+            SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () {
+                provider.setAsDefaultApp();
+              },
+              child: Text("Set as Default SMS App"),
+            ),
+          ] else ...[
+            Expanded(
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Positioned(
+                    top: 20,
+                    child: Container(
+                      height: 100,
+                      width: 100,
+                      decoration: BoxDecoration(color: Colors.orange, borderRadius: BorderRadius.circular(20)),
+                      child: Center(
+                        child: Text(
+                          "APP LOGO",
+                          style: TextStyle(fontSize: 20, color: Colors.black, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Lottie.asset('assets/lottie/setting.json'),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 60, left: 18),
+                    child: Text(
+                      "Loading...",
+                      style: TextStyle(fontSize: 20, color: Colors.orange, fontWeight: FontWeight.bold),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+
+                  Positioned(
+                    bottom: 100,
+                    child: Text(
+                      "Loading Messages...",
+                      style: TextStyle(fontSize: 20, color: Colors.orange, fontWeight: FontWeight.bold),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  SizedBox(),
+                ],
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
