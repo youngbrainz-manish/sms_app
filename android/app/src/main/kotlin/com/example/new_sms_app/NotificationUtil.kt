@@ -20,22 +20,21 @@ object NotificationUtil {
         threadId: Long
     ) {
 
-        // Intent to open conversation
-        val intent = Intent(context, MainActivity::class.java).apply {
+        val openIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra("address", address)
             putExtra("threadId", threadId)
             putExtra("openConversation", true)
         }
 
-        val pendingIntent = PendingIntent.getActivity(
+        val openPendingIntent = PendingIntent.getActivity(
             context,
             threadId.toInt(),
-            intent,
+            openIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // Notification channel (Android 8+)
+        // 🔹 Channel (Android 8+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
@@ -51,7 +50,7 @@ object NotificationUtil {
             .setContentTitle(title)
             .setContentText(body)
             .setAutoCancel(true)
-            .setContentIntent(pendingIntent)
+            .setContentIntent(openPendingIntent)
             .build()
 
         (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)

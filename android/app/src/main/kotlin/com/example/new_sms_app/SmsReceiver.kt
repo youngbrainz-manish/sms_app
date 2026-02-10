@@ -5,80 +5,78 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.provider.Telephony
-import android.util.Log
 import io.flutter.plugin.common.EventChannel
+import com.example.new_sms_app.utils.PhoneUtils
 
 class SmsReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action == Telephony.Sms.Intents.SMS_RECEIVED_ACTION) {
-            val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent)
-            val smsDataList = mutableListOf<Map<String, Any?>>()
-            for (sms in messages) {
-                val data = mapOf(
-                    "address" to sms.originatingAddress,
-                    "body" to sms.messageBody,
-                    "date" to System.currentTimeMillis(),
-                    "is_mine" to 0,
-                    "is_read" to 0
-                )
-                // Log.d("TAG", "Requesting default SMS role $data")
-                smsDataList.add(data)
-                // send to Flutter via EventChannel
-                SmsStreamHandler.eventSink?.success(data)
-            }
+        if (intent.action != Telephony.Sms.Intents.SMS_RECEIVED_ACTION) return
 
-            // show notification only if app in background
-            
-                for (sms in messages) {
-                    val address = sms.originatingAddress ?: "Unknown"
-                    val body = sms.messageBody ?: ""
-                    val threadId = getThreadId(context, address)
+        val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent)
+        if (messages.isEmpty()) return
 
-                    NotificationUtil.show(
-                        context = context,
-                        title = address,
-                        body = body,
-                        address = address,
-                        threadId = threadId
-                    )
-
-                }
-            
-        }
-    }
-
-    private fun getThreadId(context: Context, address: String): Long {
-        val cursor = context.contentResolver.query(
-            Telephony.Sms.CONTENT_URI,
-            arrayOf(Telephony.Sms.THREAD_ID),
-            "${Telephony.Sms.ADDRESS}=?",
-            arrayOf(address),
-            "date DESC"
+        // ✅ SAME ADDRESS FOR ALL PARTS
+        val rawAddress = messages[0].originatingAddress ?: return
+        val address = PhoneUtils.normalize(
+            rawAddress,
+            source = "SmsReceiver"
         )
 
-        cursor?.use {
-            if (it.moveToFirst()) {
-                return it.getLong(0)
-            }
+        // ✅ MERGE MULTI-PART SMS
+        val bodyBuilder = StringBuilder()
+        for (sms in messages) {
+            bodyBuilder.append(sms.messageBody ?: "")
         }
-        return System.currentTimeMillis()
-    }
 
+        // ✅ REAL SMS TIME (VERY IMPORTANT)
+        val timestamp = messages[0].timestampMillis
+
+        // ✅ SAVE TO ANDROID LOCAL DB (CRITICAL FIX)
+        SmsLocalStore.insert(
+            context = context,
+            address = address,
+            body = bodyBuilder.toString(),
+            date = timestamp
+        )
+
+        // 🔹 OPTIONAL: notify Flutter IF app is alive
+        SmsStreamHandler.eventSink?.success(
+            mapOf(
+                "address" to address,
+                "body" to bodyBuilder.toString(),
+                "date" to timestamp,
+                "is_mine" to 0,
+                "is_read" to 0
+            )
+        )
+
+        // 🔔 Notification when app is background/killed
+        if (!isAppInForeground(context)) {
+            NotificationUtil.show(
+                context = context,
+                title = address,
+                body = bodyBuilder.toString(),
+                address = address,
+                threadId = timestamp
+            )
+        }
+    }
 
     private fun isAppInForeground(context: Context): Boolean {
         val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-        for (process in am.runningAppProcesses) {
-            if (process.processName == context.packageName &&
-                process.importance == ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
-            ) return true
+        val processes = am.runningAppProcesses ?: return false
+
+        return processes.any {
+            it.processName == context.packageName &&
+            it.importance == ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
         }
-        return false
     }
 }
 
-// --- EventChannel Handler ---
-class SmsStreamHandler(private val context: Context) : EventChannel.StreamHandler {
+/* ---------------- EventChannel (OPTIONAL) ---------------- */
+
+class SmsStreamHandler : EventChannel.StreamHandler {
 
     companion object {
         var eventSink: EventChannel.EventSink? = null

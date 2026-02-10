@@ -55,13 +55,11 @@ class _MyAppState extends State<MyApp> {
       );
     }
     return MultiProvider(
-      ///TODO call from permission screen -..syncSystemMessages
       providers: [ChangeNotifierProvider(create: (_) => InboxProvider())],
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
         theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo), useMaterial3: true),
         home: (accessGranted && isDefaultApp) ? const InboxScreen() : const PermissionIntroScreen(),
-        // home: const PermissionIntroScreen(),
       ),
     );
   }

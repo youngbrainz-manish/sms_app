@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:lottie/lottie.dart';
 import 'package:new_sms_app/data/model/sms_message_model.dart';
 import 'package:new_sms_app/provider/inbox_provider.dart';
+import 'package:new_sms_app/screens/contact/contact_list_screen.dart';
 import 'package:new_sms_app/screens/conversion/conversation_screen.dart';
 import 'package:provider/provider.dart';
 
@@ -21,31 +22,50 @@ class _InboxScreenState extends State<InboxScreen> {
         builder: (context, provider, child) {
           return Scaffold(
             backgroundColor: Colors.white,
-            appBar: AppBar(
-              centerTitle: true,
-              title: const Text(
-                "Messages",
-                style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
-              ),
-              backgroundColor: Colors.white,
-              elevation: 10,
-              actions: (provider.isDefaultApp == true)
-                  ? [
-                      IconButton(
-                        onPressed: () async {
-                          provider.syncSystemMessages();
-                        },
-                        icon: Icon(Icons.refresh),
-                      ),
-                    ]
-                  : [],
-            ),
+            appBar: _buildAppBar(provider),
             body: provider.isDefaultApp && provider.isFirstLoading == false
                 ? _buildBody(provider: provider)
                 : getDefaultPermissionWidget(provider: provider),
+            floatingActionButton: GestureDetector(
+              onTap: () {
+                Navigator.push(context, MaterialPageRoute(builder: (context) => ContactListScreen()));
+              },
+              child: Container(
+                height: 50,
+                width: 50,
+                decoration: BoxDecoration(
+                  color: Colors.indigo.shade100,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.black38, width: 2),
+                ),
+                child: Icon(Icons.edit),
+              ),
+            ),
           );
         },
       ),
+    );
+  }
+
+  AppBar _buildAppBar(InboxProvider provider) {
+    return AppBar(
+      centerTitle: true,
+      title: const Text(
+        "Messages",
+        style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+      ),
+      backgroundColor: Colors.white,
+      elevation: 10,
+      actions: (provider.isDefaultApp == true)
+          ? [
+              IconButton(
+                onPressed: () async {
+                  provider.syncSystemMessages();
+                },
+                icon: Icon(Icons.refresh),
+              ),
+            ]
+          : [],
     );
   }
 
@@ -118,7 +138,6 @@ class _InboxScreenState extends State<InboxScreen> {
               ? const Center(child: CircularProgressIndicator())
               : Column(
                   children: [
-                    _buildCategoryBar(provider: provider),
                     Expanded(
                       child: provider.filtered.isEmpty
                           ? Center(
@@ -141,42 +160,6 @@ class _InboxScreenState extends State<InboxScreen> {
                 ),
         ),
       ],
-    );
-  }
-
-  Widget _buildCategoryBar({required InboxProvider provider}) {
-    return Container(
-      height: 30,
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        children: provider.categories
-            .map(
-              (cat) => GestureDetector(
-                onTap: () => provider.applyFilter(newCategory: cat),
-                child: Container(
-                  padding: EdgeInsets.symmetric(horizontal: 20),
-                  margin: EdgeInsets.only(right: 6),
-                  decoration: BoxDecoration(
-                    color: provider.selectedCategory == cat ? Colors.indigo : Colors.white,
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: Colors.indigo),
-                  ),
-                  child: Center(
-                    child: Text(
-                      cat,
-                      style: TextStyle(
-                        color: provider.selectedCategory == cat ? Colors.white : Colors.indigo,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            )
-            .toList(),
-      ),
     );
   }
 
@@ -231,7 +214,7 @@ class _InboxScreenState extends State<InboxScreen> {
                       overflow: TextOverflow.ellipsis,
                     ),
                   )
-                : SizedBox(),
+                : Text(""),
             Text(_formatDate(msg.date ?? 0), style: TextStyle(color: Colors.grey[500], fontSize: 12)),
           ],
         ),
@@ -240,8 +223,19 @@ class _InboxScreenState extends State<InboxScreen> {
   }
 
   String _formatDate(int timestamp) {
-    final dateFormat = DateFormat('hh:mm a');
     final date = DateTime.fromMillisecondsSinceEpoch(timestamp);
-    return dateFormat.format(date);
+    final now = DateTime.now();
+
+    final today = DateTime(now.year, now.month, now.day);
+    final messageDay = DateTime(date.year, date.month, date.day);
+    final difference = today.difference(messageDay).inDays;
+
+    if (difference == 0) {
+      return DateFormat('hh:mm a').format(date);
+    } else if (difference == 1) {
+      return 'Yesterday';
+    } else {
+      return DateFormat('dd/MM/yyyy').format(date);
+    }
   }
 }

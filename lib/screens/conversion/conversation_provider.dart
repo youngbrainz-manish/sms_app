@@ -3,48 +3,47 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:new_sms_app/database/database_helper.dart';
 import 'package:new_sms_app/services/sms_service.dart';
+import 'package:new_sms_app/utils/phone_utils.dart';
 
 class ConversationProvider extends ChangeNotifier with WidgetsBindingObserver {
   final BuildContext context;
   final ScrollController scrollController = ScrollController();
+  final TextEditingController controller = TextEditingController();
+
+  late StreamSubscription smsSub;
+  final String address;
+
   bool firstAutoscrollExecuted = false;
   bool shouldAutoscroll = true;
 
-  final TextEditingController controller = TextEditingController();
-  late StreamSubscription smsSub;
-
-  ConversationProvider({required this.context, required String address}) {
+  ConversationProvider({required this.context, required this.address}) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _init(address: address);
+      _init();
     });
   }
 
-  Future<void> _init({required String address}) async {
-    _markAsRead(address: address);
-    _listenIncomingSms(address: address);
-  }
-
-  void _markAsRead({required String address}) async {
+  Future<void> _init() async {
     WidgetsBinding.instance.addObserver(this);
     await DatabaseHelper.instance.markAsRead(address);
+    _listenIncomingSms();
   }
 
-  void _listenIncomingSms({required String address}) {
+  void _listenIncomingSms() {
     smsSub = SmsService.smsStream.listen((sms) async {
-      if (sms['address'] == address) {
-        await DatabaseHelper.instance.insertMessage(sms);
-        shouldAutoscroll = true;
-        notifyListeners();
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (scrollController.hasClients) {
-            scrollController.animateTo(
-              scrollController.position.maxScrollExtent,
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeOut,
-            );
-          }
-        });
-      }
+      final normalized = PhoneUtils.normalize(sms['address'], source: 'stream');
+
+      if (normalized != address) return;
+
+      await DatabaseHelper.instance.insertMessage({
+        'address': normalized,
+        'body': sms['body'],
+        'date': sms['date'],
+        'is_mine': sms['is_mine'],
+        'is_read': 1,
+      });
+
+      notifyListeners();
+      _scrollToBottom();
     });
   }
 
@@ -54,26 +53,22 @@ class ConversationProvider extends ChangeNotifier with WidgetsBindingObserver {
 
     controller.clear();
 
-    final msg = {
-      'address': address,
-      'body': text,
-      'date': DateTime.now().millisecondsSinceEpoch,
-      'is_mine': 1,
-      'is_read': 1,
-    };
-
-    await DatabaseHelper.instance.insertMessage(msg);
-
     try {
       await SmsService.sendSms(address, text);
+      _scrollToBottom();
+      await SmsService().syncSystemMessages();
+      _scrollToBottom();
     } catch (e) {
       if (kDebugMode) print("❌ SMS send failed: $e");
     }
+  }
+
+  void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (scrollController.hasClients) {
         scrollController.animateTo(
           scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
+          duration: const Duration(milliseconds: 100),
           curve: Curves.easeOut,
         );
       }
@@ -99,15 +94,7 @@ class ConversationProvider extends ChangeNotifier with WidgetsBindingObserver {
     // ignore: deprecated_member_use
     final bottomInset = WidgetsBinding.instance.window.viewInsets.bottom;
     if (bottomInset > 0) {
-      Future.delayed(const Duration(milliseconds: 120), () {
-        if (scrollController.hasClients) {
-          scrollController.animateTo(
-            scrollController.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 250),
-            curve: Curves.easeOut,
-          );
-        }
-      });
+      Future.delayed(const Duration(milliseconds: 120), _scrollToBottom);
     }
   }
 }

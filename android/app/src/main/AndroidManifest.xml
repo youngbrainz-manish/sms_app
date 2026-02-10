@@ -51,6 +51,9 @@
 
 
 
+        <receiver
+            android:name=".SmsReplyReceiver"
+            android:exported="false" />
 
         <receiver
             android:name=".SmsReceiver"

@@ -5,6 +5,8 @@ import 'package:new_sms_app/app_constants.dart';
 import 'package:new_sms_app/data/model/sms_message_model.dart';
 import 'package:new_sms_app/database/database_helper.dart';
 import 'package:new_sms_app/services/sms_manager.dart';
+import 'package:new_sms_app/services/sms_service.dart';
+import 'package:new_sms_app/utils/phone_utils.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -13,9 +15,6 @@ class InboxProvider with ChangeNotifier {
   bool accessGranted = false;
   bool isFirstLoading = false;
   SharedPreferences? prefs;
-
-  String selectedCategory = "All";
-  final List<String> categories = ["All", "Personal", "OTP", "Bank", "Offers"];
 
   bool isLoading = true;
   List<SmsMessageModel> _messages = [];
@@ -49,6 +48,10 @@ class InboxProvider with ChangeNotifier {
     isLoading = true;
     await refreshInbox();
     notifyListeners();
+    if (messages.isEmpty) {
+      isLoading = true;
+      notifyListeners();
+    }
     await syncSystemMessages();
   }
 
@@ -71,27 +74,16 @@ class InboxProvider with ChangeNotifier {
   void _listenIncomingSms() {
     _smsSubscription = eventChannel.receiveBroadcastStream().listen((dynamic sms) async {
       if (sms is Map) {
-        // insert into DB (ignore duplicates)
-        await DatabaseHelper.instance.insertMessage(Map<String, dynamic>.from(sms));
+        await DatabaseHelper.instance.insertMessage({
+          'address': PhoneUtils.normalize(sms['address'], source: '4'),
+          'body': sms['body'].toString(),
+          'date': sms['date'],
+          'is_mine': sms['is_mine'],
+          'is_read': sms['is_read'],
+        });
         await refreshInbox();
       }
     });
-  }
-
-  void applyFilter({required String newCategory}) {
-    selectedCategory = newCategory;
-    filtered = selectedCategory == "All" ? _messages : _messages.where((m) => m.category == selectedCategory).toList();
-    isLoading = false;
-    notifyListeners();
-  }
-
-  String _determineCategory(String address, String body) {
-    final b = body.toLowerCase();
-    final addr = address.toLowerCase();
-    if (RegExp(r'otp|code|verify|vcode').hasMatch(b)) return "OTP";
-    if (RegExp(r'bank|credit|debit|txn|amt').hasMatch(b)) return "Bank";
-    if (addr.length <= 6 || !addr.contains('+')) return "Offers";
-    return "Personal";
   }
 
   Future<void> syncSystemMessages() async {
@@ -99,17 +91,7 @@ class InboxProvider with ChangeNotifier {
     if (!contactStatus.isGranted) contactStatus = await Permission.contacts.request();
 
     try {
-      final List<dynamic> systemSms = await platform.invokeMethod('fetchSystemSms');
-      for (var sms in systemSms) {
-        await DatabaseHelper.instance.insertMessage({
-          'address': sms['address'],
-          'body': sms['body'],
-          'date': sms['date'],
-          'is_mine': sms['is_mine'],
-          'is_read': sms['is_read'],
-          'category': _determineCategory(sms['address'], sms['body']),
-        });
-      }
+      await SmsService().syncSystemMessages();
       await refreshInbox();
     } on PlatformException catch (e) {
       debugPrint("Sync error: ${e.message}");
@@ -124,7 +106,9 @@ class InboxProvider with ChangeNotifier {
     }).toList();
     _messages.clear();
     _messages = modelMessages;
-    applyFilter(newCategory: selectedCategory);
+    filtered = _messages;
+    isLoading = false;
+    notifyListeners();
   }
 
   @override
