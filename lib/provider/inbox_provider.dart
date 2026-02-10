@@ -1,8 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:new_sms_app/app_constants.dart';
+import 'package:new_sms_app/data/model/contact_model.dart';
 import 'package:new_sms_app/data/model/sms_message_model.dart';
+import 'package:new_sms_app/database/contacts_database_helper.dart';
 import 'package:new_sms_app/database/database_helper.dart';
 import 'package:new_sms_app/services/sms_manager.dart';
 import 'package:new_sms_app/services/sms_service.dart';
@@ -13,7 +16,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 class InboxProvider with ChangeNotifier {
   bool isDefaultApp = false;
   bool accessGranted = false;
-  bool isFirstLoading = false;
   SharedPreferences? prefs;
 
   bool isLoading = true;
@@ -47,6 +49,7 @@ class InboxProvider with ChangeNotifier {
   Future<void> _init() async {
     isLoading = true;
     await refreshInbox();
+    await syncContactsSilently(); // Then enrich inbox with contacts
     notifyListeners();
     if (messages.isEmpty) {
       isLoading = true;
@@ -56,17 +59,14 @@ class InboxProvider with ChangeNotifier {
   }
 
   Future<void> setAsDefaultApp() async {
-    isFirstLoading = true;
     notifyListeners();
     isDefaultApp = await SmsManager().requestDefaultSmsApp();
     prefs?.setBool(AppConstants.isDefaultApp, isDefaultApp);
     notifyListeners();
     if (isDefaultApp == true) {
-      isFirstLoading = true;
       notifyListeners();
       refreshInbox();
       await syncSystemMessages();
-      isFirstLoading = false;
       notifyListeners();
     }
   }
@@ -93,13 +93,15 @@ class InboxProvider with ChangeNotifier {
     try {
       await SmsService().syncSystemMessages();
       await refreshInbox();
+
+      await syncContactsSilently(); // 👈 important
     } on PlatformException catch (e) {
       debugPrint("Sync error: ${e.message}");
     }
   }
 
   Future<void> refreshInbox() async {
-    List<Map<String, dynamic>> tempMessages = await DatabaseHelper.instance.getMessages();
+    List<Map<String, dynamic>> tempMessages = await DatabaseHelper.instance.getInboxWithContacts();
     final modelMessages = tempMessages.map((e) {
       SmsMessageModel td = SmsMessageModel.fromJson(Map<String, dynamic>.from(e));
       return td;
@@ -115,5 +117,37 @@ class InboxProvider with ChangeNotifier {
   void dispose() {
     _smsSubscription?.cancel();
     super.dispose();
+  }
+
+  Future<void> syncContactsSilently() async {
+    try {
+      final contacts = await FlutterContacts.getContacts(withProperties: true, withThumbnail: true);
+
+      final List<ContactModel> contactModels = [];
+
+      for (final contact in contacts) {
+        if (contact.phones.isEmpty) continue;
+
+        for (final phone in contact.phones) {
+          final normalizedPhone = PhoneUtils.normalize(phone.number, source: 'contact_sync');
+          contactModels.add(
+            ContactModel(
+              id: contact.id,
+              name: contact.displayName,
+              phone: normalizedPhone,
+              avatar: contact.photo ?? contact.thumbnail,
+            ),
+          );
+        }
+      }
+
+      // 🔥 STORE ALL CONTACTS IN DB (BATCH)
+      await ContactsDatabaseHelper.instance.insertContacts(contactModels);
+
+      // 🔄 REFRESH INBOX (this updates UI)
+      await refreshInbox();
+    } catch (e) {
+      debugPrint('Contact sync error: $e');
+    }
   }
 }

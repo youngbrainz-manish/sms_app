@@ -57,8 +57,8 @@ class SmsMessageModel {
   factory SmsMessageModel.fromJson(Map<String, dynamic> json) {
     return SmsMessageModel(
       id: json['id'] as int?,
-      avatar: json['avatar'] != null ? base64Decode(json['avatar']) : null,
-      name: json['name'] as String?,
+      avatar: json['photo_uri'] != null ? json['photo_uri'] as Uint8List? : null,
+      name: json['contact_name'] as String?,
       address: json['address'] as String?,
       body: json['body'] as String?,
       date: json['date'] as int?,
@@ -73,8 +73,8 @@ class SmsMessageModel {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'avatar': avatar != null ? base64Encode(avatar!) : null,
-      'name': name,
+      'photo_uri': avatar != null ? base64Encode(avatar!) : null,
+      'contact_name': name,
       'address': address,
       'body': body,
       'date': date,

@@ -23,9 +23,7 @@ class _InboxScreenState extends State<InboxScreen> {
           return Scaffold(
             backgroundColor: Colors.white,
             appBar: _buildAppBar(provider),
-            body: provider.isDefaultApp && provider.isFirstLoading == false
-                ? _buildBody(provider: provider)
-                : getDefaultPermissionWidget(provider: provider),
+            body: _buildBody(provider: provider),
             floatingActionButton: GestureDetector(
               onTap: () {
                 Navigator.push(context, MaterialPageRoute(builder: (context) => ContactListScreen()));
@@ -56,7 +54,7 @@ class _InboxScreenState extends State<InboxScreen> {
       ),
       backgroundColor: Colors.white,
       elevation: 10,
-      actions: (provider.isDefaultApp == true)
+      actions: (provider.isDefaultApp == true && (!provider.isLoading))
           ? [
               IconButton(
                 onPressed: () async {
@@ -180,7 +178,7 @@ class _InboxScreenState extends State<InboxScreen> {
       child: ListTile(
         contentPadding: EdgeInsets.only(left: 6, right: 4),
         leading: CircleAvatar(
-          radius: 28,
+          radius: 20,
           backgroundColor: Colors.grey[200],
           backgroundImage: msg.avatar != null ? MemoryImage(msg.avatar!) : null,
           child: msg.avatar == null
